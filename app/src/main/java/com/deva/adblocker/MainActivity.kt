@@ -129,7 +129,11 @@ class MainActivity : Activity() {
             setOnClickListener { pickSkippedApps(this) }
         }
         skipLabel(skipBtn)
-        extraViews = listOf(closeSwitch, skipBtn)
+        val logBtn = Button(this).apply {
+            text = "📋 App log (எந்த app எங்க போகுது)"
+            setOnClickListener { startActivity(Intent(this@MainActivity, LogActivity::class.java)) }
+        }
+        extraViews = listOf(closeSwitch, skipBtn, logBtn)
         info = TextView(this).apply {
             textSize = 15f
             gravity = Gravity.CENTER

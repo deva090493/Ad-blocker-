@@ -64,6 +64,7 @@ class AdBlockVpnService : VpnService() {
         try {
             if (Blocklist.size() == 0) Blocklist.load(this)
         } catch (_: Exception) { }
+        AppRules.load(this)
 
         val builder = Builder()
             .setSession("Ad Blocker")
@@ -130,13 +131,31 @@ class AdBlockVpnService : VpnService() {
         val dns = pkt.copyOfRange(ihl + 8, pkt.size)
 
         val q = Packets.parseQuestion(dns)
-        if (q != null && Blocklist.isBlocked(q.name)) {
-            blockedCount.incrementAndGet()
-            val reply = Packets.buildUdpIpv4(dstIp, srcIp, 53, srcPort, Packets.blockedResponse(dns, q))
-            write(out, reply)
-            return
+        pool?.execute {
+            if (q == null) { forward(dns, srcIp, dstIp, srcPort, out); return@execute }
+            val pkg = ownerPackage(srcIp, srcPort, dstIp)
+            val blocked = AppRules.decide(q.name, pkg)
+            QueryLog.add(this, pkg, q.name, blocked)
+            if (blocked) {
+                blockedCount.incrementAndGet()
+                write(out, Packets.buildUdpIpv4(dstIp, srcIp, 53, srcPort, Packets.blockedResponse(dns, q)))
+            } else {
+                forward(dns, srcIp, dstIp, srcPort, out)
+            }
         }
-        pool?.execute { forward(dns, srcIp, dstIp, srcPort, out) }
+    }
+
+    /** Which app sent this DNS lookup (Android 10+). Null if unknown. */
+    private fun ownerPackage(srcIp: ByteArray, srcPort: Int, dstIp: ByteArray): String? {
+        if (android.os.Build.VERSION.SDK_INT < 29) return null
+        return try {
+            val cm = getSystemService(android.net.ConnectivityManager::class.java)
+            val uid = cm.getConnectionOwnerUid(
+                android.system.OsConstants.IPPROTO_UDP,
+                java.net.InetSocketAddress(InetAddress.getByAddress(srcIp), srcPort),
+                java.net.InetSocketAddress(InetAddress.getByAddress(dstIp), 53))
+            if (uid < 0) null else packageManager.getPackagesForUid(uid)?.firstOrNull()
+        } catch (_: Exception) { null }
     }
 
     private fun forward(dns: ByteArray, srcIp: ByteArray, dstIp: ByteArray, srcPort: Int, out: FileOutputStream) {
