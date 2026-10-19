@@ -22,6 +22,7 @@ class AdBlockVpnService : VpnService() {
     companion object {
         const val ACTION_START = "com.deva.adblocker.START"
         const val ACTION_STOP = "com.deva.adblocker.STOP"
+        const val ACTION_RESTART = "com.deva.adblocker.RESTART"
         private const val VPN_ADDRESS = "10.111.222.1"
         private const val FAKE_DNS = "10.111.222.2"
         private val UPSTREAM = listOf("1.1.1.1", "8.8.8.8")
@@ -40,8 +41,21 @@ class AdBlockVpnService : VpnService() {
             stopSelf()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_RESTART) {
+            if (running) { stopVpn(); startVpn() }
+            return START_NOT_STICKY
+        }
         startVpn()
-        return START_STICKY
+        return START_NOT_STICKY
+    }
+
+    /** App swiped away from Recents -> switch the ad blocker off. */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        if (Settings.stopOnClose(this)) {
+            stopVpn()
+            stopSelf()
+        }
+        super.onTaskRemoved(rootIntent)
     }
 
     @Synchronized
@@ -58,6 +72,10 @@ class AdBlockVpnService : VpnService() {
             .addRoute(FAKE_DNS, 32)   // only DNS comes to us; normal traffic stays direct & fast
             .setBlocking(true)
         try { builder.addDisallowedApplication(packageName) } catch (_: Exception) { }
+        // Apps on the skip list use the normal network: no VPN, no blocking, nothing to detect
+        for (pkg in Settings.skippedApps(this)) {
+            try { builder.addDisallowedApplication(pkg) } catch (_: Exception) { }
+        }
 
         val fd = try { builder.establish() } catch (_: Exception) { null } ?: return
         tun = fd

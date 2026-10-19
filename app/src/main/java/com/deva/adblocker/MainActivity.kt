@@ -28,6 +28,50 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var toggle: Button
     private lateinit var info: TextView
+    private var extraViews: List<android.view.View> = emptyList()
+
+    private fun skipLabel(btn: Button) {
+        val n = Settings.skippedApps(this).size
+        btn.text = if (n == 0) "Ad blocker தெரியக்கூடாத apps தேர்வு பண்ணு"
+                   else "Ad blocker தெரியாத apps: $n (மாற்ற tap பண்ணு)"
+    }
+
+    /** Pick apps that should bypass the VPN completely (e.g. apps that complain about ad blockers). */
+    private fun pickSkippedApps(btn: Button) {
+        btn.isEnabled = false
+        thread {
+            val pm = packageManager
+            val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val apps = pm.queryIntentActivities(launcher, 0)
+                .map { it.activityInfo.packageName to it.loadLabel(pm).toString() }
+                .filter { it.first != packageName }
+                .distinctBy { it.first }
+                .sortedBy { it.second.lowercase() }
+            val chosen = Settings.skippedApps(this).toMutableSet()
+            // chosen apps first, so they are easy to find
+            val ordered = apps.sortedBy { if (it.first in chosen) 0 else 1 }
+            runOnUiThread {
+                btn.isEnabled = true
+                val names = ordered.map { it.second }.toTypedArray()
+                val checked = ordered.map { it.first in chosen }.toBooleanArray()
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("இந்த apps-க்கு ad blocker தெரியாது (அவற்றில் ads வரும்)")
+                    .setMultiChoiceItems(names, checked) { _, i, on ->
+                        if (on) chosen.add(ordered[i].first) else chosen.remove(ordered[i].first)
+                    }
+                    .setPositiveButton("Save") { _, _ ->
+                        Settings.setSkippedApps(this, chosen)
+                        skipLabel(btn)
+                        if (AdBlockVpnService.running) {
+                            startService(Intent(this, AdBlockVpnService::class.java).setAction(AdBlockVpnService.ACTION_RESTART))
+                        }
+                        Toast.makeText(this, "Save ஆச்சு. அந்த app-ஐ ஒரு தடவை close பண்ணி திறங்க.", Toast.LENGTH_LONG).show()
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
+    }
     private val handler = Handler(Looper.getMainLooper())
     private val tick = object : Runnable {
         override fun run() {
@@ -74,6 +118,18 @@ class MainActivity : Activity() {
                 thread { try { Blocklist.load(this@MainActivity) } catch (_: Exception) { } }
             }
         }
+        val closeSwitch = Switch(this).apply {
+            text = "App-ஐ close பண்ணா (Recents-ல swipe) VPN off ஆகணும்"
+            textSize = 15f
+            isChecked = Settings.stopOnClose(this@MainActivity)
+            setPadding(0, pad / 2, 0, 0)
+            setOnCheckedChangeListener { _, on -> Settings.setStopOnClose(this@MainActivity, on) }
+        }
+        val skipBtn = Button(this).apply {
+            setOnClickListener { pickSkippedApps(this) }
+        }
+        skipLabel(skipBtn)
+        extraViews = listOf(closeSwitch, skipBtn)
         info = TextView(this).apply {
             textSize = 15f
             gravity = Gravity.CENTER
@@ -86,7 +142,8 @@ class MainActivity : Activity() {
                 "• முதல் தடவை ON பண்ணும்போது 'Connection request' வரும் — OK கொடுங்க.\n" +
                 "• Settings → Network → Private DNS → OFF வைங்க.\n" +
                 "• Chrome → Settings → Privacy → 'Use secure DNS' → OFF வைங்க.\n" +
-                "• எப்பவும் ON-ஆ இருக்க: Settings → VPN → Ad Blocker ⚙ → Always-on VPN.\n" +
+                "• App close பண்ணா off ஆகணும்னா Settings → VPN → Ad Blocker ⚙ → Always-on VPN OFF-ல இருக்கணும்.\n" +
+                "• ON பண்ணிட்டு Home button அழுத்துங்க (Recents-ல இருந்து swipe பண்ணாதீங்க) — அப்போ தான் மத்த apps-ல block ஆகும்.\n" +
                 "• Site-ல இருந்து வர்ற ad notifications: Chrome → Settings → Site settings → Notifications → OFF.\n" +
                 "• YouTube / Hotstar / Instagram / Facebook ads video-வோட சேர்ந்தே வருது — அவை block ஆகாது."
         }
@@ -96,6 +153,7 @@ class MainActivity : Activity() {
         root.addView(toggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(update, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(strong, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        for (v in extraViews) root.addView(v, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(info)
         root.addView(tips)
         setContentView(ScrollView(this).apply { addView(root) })
