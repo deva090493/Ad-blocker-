@@ -27,7 +27,8 @@ jobs:
         run: |
           mkdir -p app/src/main/assets
           curl -fsSL https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts -o app/src/main/assets/hosts.txt
-          wc -l app/src/main/assets/hosts.txt
+          curl -fsSL https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt -o app/src/main/assets/adguard.txt
+          wc -l app/src/main/assets/*.txt
 
       - name: Build APK
         run: gradle assembleRelease --no-daemon --stacktrace

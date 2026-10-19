@@ -12,6 +12,7 @@ import android.view.Gravity
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import java.io.File
@@ -63,6 +64,16 @@ class MainActivity : Activity() {
             text = "Ad list update பண்ணு"
             setOnClickListener { updateList(this) }
         }
+        val strong = Switch(this).apply {
+            text = "Strong mode (OTT / video ads)\nஏதாவது app-ல video ஓடலைன்னா OFF பண்ணுங்க"
+            textSize = 15f
+            isChecked = Blocklist.isStrong(this@MainActivity)
+            setPadding(0, pad, 0, 0)
+            setOnCheckedChangeListener { _, on ->
+                Blocklist.setStrong(this@MainActivity, on)
+                thread { try { Blocklist.load(this@MainActivity) } catch (_: Exception) { } }
+            }
+        }
         info = TextView(this).apply {
             textSize = 15f
             gravity = Gravity.CENTER
@@ -76,13 +87,15 @@ class MainActivity : Activity() {
                 "• Settings → Network → Private DNS → OFF வைங்க.\n" +
                 "• Chrome → Settings → Privacy → 'Use secure DNS' → OFF வைங்க.\n" +
                 "• எப்பவும் ON-ஆ இருக்க: Settings → VPN → Ad Blocker ⚙ → Always-on VPN.\n" +
-                "• YouTube / Instagram / Facebook ads இந்த முறையில block ஆகாது."
+                "• Site-ல இருந்து வர்ற ad notifications: Chrome → Settings → Site settings → Notifications → OFF.\n" +
+                "• YouTube / Hotstar / Instagram / Facebook ads video-வோட சேர்ந்தே வருது — அவை block ஆகாது."
         }
 
         root.addView(title)
         root.addView(status)
         root.addView(toggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(update, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        root.addView(strong, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         root.addView(info)
         root.addView(tips)
         setContentView(ScrollView(this).apply { addView(root) })
@@ -140,22 +153,26 @@ class MainActivity : Activity() {
         btn.isEnabled = false
         btn.text = "Download ஆகுது..."
         thread {
-            val msg = try {
-                val tmp = File(filesDir, "hosts.tmp")
-                val conn = URL(listUrl).openConnection() as HttpURLConnection
-                conn.connectTimeout = 15000
-                conn.readTimeout = 30000
-                conn.inputStream.use { inp -> tmp.outputStream().use { inp.copyTo(it) } }
-                conn.disconnect()
-                if (tmp.length() < 1000) throw Exception("empty")
-                val target = Blocklist.userFile(this)
-                target.delete()
-                tmp.renameTo(target)
-                Blocklist.load(this)
-                "Update ஆச்சு ✅ (${Blocklist.size()} domains)"
-            } catch (e: Exception) {
-                "Update fail ஆச்சு — internet check பண்ணுங்க"
+            var ok = 0
+            for ((name, url) in Blocklist.SOURCES) {
+                if (url == null) continue
+                try {
+                    val tmp = File(filesDir, "$name.tmp")
+                    val conn = URL(url).openConnection() as HttpURLConnection
+                    conn.connectTimeout = 15000
+                    conn.readTimeout = 30000
+                    conn.inputStream.use { inp -> tmp.outputStream().use { inp.copyTo(it) } }
+                    conn.disconnect()
+                    if (tmp.length() < 1000) throw Exception("empty")
+                    val target = Blocklist.userFile(this, name)
+                    target.delete()
+                    tmp.renameTo(target)
+                    ok++
+                } catch (_: Exception) { }
             }
+            try { Blocklist.load(this) } catch (_: Exception) { }
+            val msg = if (ok > 0) "Update ஆச்சு ✅ (${Blocklist.size()} domains)"
+                      else "Update fail ஆச்சு — internet check பண்ணுங்க"
             runOnUiThread {
                 btn.isEnabled = true
                 btn.text = "Ad list update பண்ணு"

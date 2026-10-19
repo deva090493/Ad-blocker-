@@ -1,0 +1,51 @@
+# Extra ad domains used by video players / OTT apps and app ad SDKs
+# ("Strong mode" — turn off in the app if some app stops playing videos)
+
+# Google video ads (IMA SDK) & ad servers
+imasdk.googleapis.com
+pubads.g.doubleclick.net
+securepubads.g.doubleclick.net
+googleads.g.doubleclick.net
+ad.doubleclick.net
+static.doubleclick.net
+pagead2.googlesyndication.com
+tpc.googlesyndication.com
+googleadservices.com
+adservice.google.com
+
+# Video ad platforms
+fwmrm.net
+innovid.com
+spotxchange.com
+springserve.com
+tremorhub.com
+teads.tv
+moatads.com
+adsrvr.org
+
+# App ad SDKs (in-app banner / full-screen ads)
+unityads.unity3d.com
+an.facebook.com
+ads.inmobi.com
+applovin.com
+applvn.com
+adcolony.com
+vungle.com
+chartboost.com
+supersonicads.com
+ads.mopub.com
+
+# Web ad networks / pop-ups / redirects
+adnxs.com
+pubmatic.com
+rubiconproject.com
+openx.net
+smartadserver.com
+criteo.com
+taboola.com
+outbrain.com
+popads.net
+popcash.net
+propellerads.com
+exoclick.com
+adsterra.com
